@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuickSale - Time-Sensitive Marketplace</title>
+
+    <!-- Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            position: relative;
+        }
+        .timeframe-btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 8px;
+            background: #e5e7eb;
+        }
+        .timeframe-btn.active {
+            background: #3b82f6;
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <header class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold">QuickSale</h1>
+            <p class="text-gray-600">Premium Time-Sensitive Marketplace</p>
+        </div>
+        <div class="flex gap-4">
+            <button id="connect-wallet" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                Connect Wallet
+            </button>
+            <button id="list-item" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                List Your Item
+            </button>
+        </div>
+    </header>
+
+    <!-- Price Chart -->
+    <div class="chart-container">
+        <div class="flex gap-2 mb-4">
+            <button class="timeframe-btn active" data-timeframe="1H">1H</button>
+            <button class="timeframe-btn" data-timeframe="4H">4H</button>
+            <button class="timeframe-btn" data-timeframe="12H">12H</button>
+            <button class="timeframe-btn" data-timeframe="24H">24H</button>
+        </div>
+        <canvas id="priceChart"></canvas>
+    </div>
+
+    <!-- Listings -->
+    <div id="listings" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+</div>
+
+<script>
+    // Price Chart Implementation
+    class PriceChart {
+        constructor() {
+            this.basePrice = 3.8;
+            this.chart = null;
+            this.timeframe = '1H';
+            this.setupChart();
+            this.setupControls();
+            this.startUpdates();
+        }
+
+        generateData() {
+            const minutes = this.timeframe === '1H' ? 60 :
+                this.timeframe === '4H' ? 240 :
+                    this.timeframe === '12H' ? 720 : 1440;
+            const data = [];
+            const now = Date.now();
+
+            for (let i = 0; i <= minutes; i++) {
+                const hoursElapsed = i / 60;
+                const hourlyIncrease = 0.003; // 0.3% hourly increase
+                const totalIncrease = Math.pow(1 + hourlyIncrease, hoursElapsed);
+                const price = this.basePrice * totalIncrease;
+
+                data.push({
+                    time: new Date(now - ((minutes - i) * 60 * 1000))
+                        .toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }),
+                    price: Number(price.toFixed(3))
+                });
+            }
+            return data;
+        }
+
+        setupChart() {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            const data = this.generateData();
+
+            this.chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.time),
+                    datasets: [{
+                        label: 'Price (SOL)',
+                        data: data.map(d => d.price),
+                        borderColor: '#3b82f6',
+                        tension: 0.4,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                callback: value => value.toFixed(3) + ' SOL'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: context => `Price: ${context.parsed.y.toFixed(3)} SOL`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        setupControls() {
+            document.querySelectorAll('.timeframe-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelector('.timeframe-btn.active').classList.remove('active');
+                    btn.classList.add('active');
+                    this.timeframe = btn.dataset.timeframe;
+                    this.updateChart();
+                });
+            });
+        }
+
+        updateChart() {
+            const data = this.generateData();
+            this.chart.data.labels = data.map(d => d.time);
+            this.chart.data.datasets[0].data = data.map(d => d.price);
+            this.chart.update();
+        }
+
+        startUpdates() {
+            setInterval(() => this.updateChart(), 60000); // Update every minute
+        }
+    }
+
+    // Sample Listings
+    const listings = [
+        {
+            id: '1',
+            title: 'Moving Sale - Premium Furniture Set',
+            urgency: 'Countdown has started from 24 hours 23 hours 59 seconds remaining',
+            location: 'San Francisco, CA',
+            price: 2.5,
+            originalPrice: 5.0,
+            timeLeft: '24 hours',
+            description: 'Luxury furniture set, must sell before international move',
+            sellerRating: 4.9,
+            verificationLevel: 'Premium'
+        },
+        {
+            id: '2',
+            title: 'Quick Sale - MacBook Pro 2023',
+            urgency: '11  hours 33 second remaining',
+            location: 'New York, NY',
+            price: 3.8,
+            originalPrice: 4.5,
+            timeLeft: '24 hours maximum time',
+            description: 'Barely used MacBook Pro, selling before travel',
+            sellerRating: 4.8,
+            verificationLevel: 'Premium'
+        }
+    ];
+
+    // Wallet Integration
+    let walletConnected = false;
+    let publicKey = null;
+
+    async function connectWallet() {
+        try {
+            if (typeof window.solana !== 'undefined') {
+                const response = await window.solana.connect();
+                publicKey = response.publicKey.toString();
+                walletConnected = true;
+
+                // Update UI
+                document.getElementById('connect-wallet').textContent =
+                    `Connected: ${publicKey.slice(0,4)}...${publicKey.slice(-4)}`;
+
+                // Enable purchase buttons
+                document.querySelectorAll('.purchase-btn').forEach(btn => {
+                    btn.disabled = false;
+                });
+            } else {
+                alert('Please install Phantom wallet');
+            }
+        } catch (error) {
+            alert('Failed to connect wallet: ' + error.message);
+        }
+    }
+
+    // Handle Purchase
+    async function handlePurchase(id) {
+        if (!walletConnected) {
+            alert('Please connect your wallet first');
+            return;
+        }
+
+        const listing = listings.find(l => l.id === id);
+        if (!listing) return;
+
+        try {
+            // Simulated Solana transaction
+            alert(`Processing purchase for ${listing.title} at ${listing.price} SOL`);
+        } catch (error) {
+            alert('Purchase failed: ' + error.message);
+        }
+    }
+
+    // Render Listings
+    function renderListings() {
+        const listingsContainer = document.getElementById('listings');
+        listingsContainer.innerHTML = listings.map(listing => `
+                <div class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
+                    <div class="text-red-500 font-medium">${listing.timeLeft} left</div>
+                    <div class="text-red-500 text-sm">${listing.urgency}</div>
+
+                    <h3 class="text-xl font-bold mt-2">${listing.title}</h3>
+                    <div class="text-gray-600 text-sm">${listing.location}</div>
+
+                    <p class="text-gray-700 my-3">${listing.description}</p>
+
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-2xl font-bold">${listing.price} SOL</span>
+                        <span class="text-gray-400 line-through">${listing.originalPrice} SOL</span>
+                    </div>
+
+                    <div class="flex items-center gap-2 my-3">
+                        <span class="text-yellow-500">★</span>
+                        <span>${listing.sellerRating}</span>
+                        <span class="text-gray-500">${listing.verificationLevel}</span>
+                    </div>
+
+                    <div class="flex gap-3 mt-4">
+                        <button onclick="handlePurchase('${listing.id}')"
+                                class="purchase-btn flex-1 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
+                                ${!walletConnected ? 'disabled' : ''}>
+                            Purchase Now
+                        </button>
+                        <button onclick="alert('Messaging coming soon!')"
+                                class="flex-1 border border-gray-300 px-4 py-2 rounded hover:bg-gray-50">
+                            Message
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        new PriceChart();
+        renderListings();
+        document.getElementById('connect-wallet').addEventListener('click', connectWallet);
+        document.getElementById('list-item').addEventListener('click', () => {
+            alert('List Item functionality coming soon!');
+        });
+    });
+</script>
+
+</body>
+</html>
