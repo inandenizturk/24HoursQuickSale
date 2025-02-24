@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuickSale - 24H Time-Sensitive Marketplace</title>
+
+    <!-- Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            position: relative;
+        }
+        .chart-tooltip {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.98);
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 12px;
+            pointer-events: none;
+            transform: translate(-50%, -100%);
+            transition: opacity 0.15s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+            opacity: 0;
+        }
+        .chart-tooltip.visible {
+            opacity: 1;
+        }
+        .chart-tooltip-title {
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+        .chart-tooltip-value {
+            color: #4b5563;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .chart-tooltip-trend {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+            font-size: 12px;
+            color: #059669;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+<div class="container mx-auto px-4 py-8">
+    <header class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold">QuickSale</h1>
+            <p class="text-gray-600">24-Hour Time-Sensitive Marketplace</p>
+        </div>
+        <div class="flex gap-4">
+            <button id="connect-wallet" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                Connect Wallet
+            </button>
+            <button id="list-item" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                List Your Item
+            </button>
+        </div>
+    </header>
+
+    <div class="chart-container">
+        <canvas id="priceChart"></canvas>
+        <div id="chartTooltip" class="chart-tooltip">
+            <div class="chart-tooltip-title"></div>
+            <div class="chart-tooltip-value"></div>
+            <div class="chart-tooltip-trend"></div>
+        </div>
+    </div>
+
+    <div id="listings" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+</div>
+
+<script>
+    class PriceChart {
+        constructor() {
+            this.basePrice = 3.8;
+            this.chart = null;
+            this.tooltip = document.getElementById('chartTooltip');
+            this.setupChart();
+            this.startUpdates();
+        }
+
+        generateData() {
+            const minutes = 1440; // 24 hours
+            const data = [];
+            const now = Date.now();
+            const pointsPerMinute = 4;
+            const totalPoints = minutes * pointsPerMinute;
+
+            for (let i = 0; i <= totalPoints; i++) {
+                const minutePoint = i / pointsPerMinute;
+                const hoursElapsed = minutePoint / 60;
+
+                const hourlyIncrease = 0.003; // 0.3% per hour
+                const totalIncrease = Math.pow(1 + hourlyIncrease, hoursElapsed);
+                const price = this.basePrice * totalIncrease;
+
+                data.push({
+                    time: new Date(now - ((minutes - minutePoint) * 60 * 1000))
+                        .toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }),
+                    price: Number(price.toFixed(3)),
+                    hoursElapsed,
+                    increase: ((totalIncrease - 1) * 100).toFixed(2)
+                });
+            }
+            return data;
+        }
+
+        updateTooltip(context) {
+            if (!context.tooltip.opacity) {
+                this.tooltip.classList.remove('visible');
+                return;
+            }
+
+            const data = this.generateData()[context.tooltip.dataPoints[0].dataIndex];
+            const price = data.price;
+            const increase = data.increase;
+            const hoursElapsed = data.hoursElapsed;
+
+            this.tooltip.style.left = context.tooltip.caretX + 'px';
+            this.tooltip.style.top = context.tooltip.caretY + 'px';
+
+            this.tooltip.querySelector('.chart-tooltip-title').textContent =
+                `Time: ${data.time}`;
+
+            this.tooltip.querySelector('.chart-tooltip-value').innerHTML =
+                `Price: ${price.toFixed(3)} SOL<br>` +
+                `Increase: ${increase}%<br>` +
+                `Hours: ${hoursElapsed.toFixed(1)}h<br>` +
+                `Rate: 0.3% / hour`;
+
+            this.tooltip.querySelector('.chart-tooltip-trend').textContent =
+                `+${(0.3 * hoursElapsed).toFixed(1)}% total`;
+
+            this.tooltip.classList.add('visible');
+        }
+
+        setupChart() {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            const data = this.generateData();
+
+            this.chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.time),
+                    datasets: [{
+                        label: 'Price (SOL)',
+                        data: data.map(d => d.price),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 4,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: '#3b82f6',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointHoverBackgroundColor: '#2563eb',
+                        pointHoverBorderColor: '#ffffff',
+                        pointHoverBorderWidth: 3,
+                        cubicInterpolationMode: 'monotone'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        tooltip: {
+                            enabled: false,
+                            external: (context) => this.updateTooltip(context)
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                callback: value => value.toFixed(3) + ' SOL'
+                            }
+                        }
+                    },
+                    onHover: (event, elements) => {
+                        const canvas = event.chart.canvas;
+
+                        if (!elements.length) {
+                            canvas.style.cursor = 'default';
+                            return;
+                        }
+
+                        const rect = canvas.getBoundingClientRect();
+                        const x = event.x - rect.left;
+                        const ctx = canvas.getContext('2d');
+
+                        // Clear previous drawings
+                        ctx.save();
+                        ctx.resetTransform();
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.restore();
+
+                        // Draw vertical line
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([6, 6]);
+                        ctx.moveTo(x, event.chart.chartArea.top);
+                        ctx.lineTo(x, event.chart.chartArea.bottom);
+                        ctx.stroke();
+                        ctx.restore();
+
+                        canvas.style.cursor = 'pointer';
+                    }
+                }
+            });
+        }
+
+        updateChart() {
+            const data = this.generateData();
+            this.chart.data.labels = data.map(d => d.time);
+            this.chart.data.datasets[0].data = data.map(d => d.price);
+            this.chart.update();
+        }
+
+        startUpdates() {
+            setInterval(() => {
+                this.updateChart();
+                renderListings();
+            }, 1000);
+        }
+    }
+
+    const listings = [
+        {
+            id: '1',
+            title: 'Moving Sale - Premium Furniture Set',
+            location: 'San Francisco, CA',
+            price: 2.5,
+            originalPrice: 5.0,
+            listingTime: Date.now() - (2 * 60 * 60 * 1000),
+            description: 'Luxury furniture set, must sell before international move',
+            sellerRating: 4.9,
+            verificationLevel: 'Premium',
+            settlementType: 'instant',
+            commission: 0.12
+        },
+        {
+            id: '2',
+            title: 'Quick Sale - MacBook Pro 2023',
+            location: 'New York, NY',
+            price: 3.8,
+            originalPrice: 4.5,
+            listingTime: Date.now() - (16 * 60 * 60 * 1000),
+            description: 'Barely used MacBook Pro, selling before travel',
+            sellerRating: 4.8,
+            verificationLevel: 'Premium',
+            settlementType: 'standard',
+            commission: 0.08
+        }
+    ];
+
+    let walletConnected = false;
+    let publicKey = null;
+
+    async function connectWallet() {
+        try {
+            if (typeof window.solana !== 'undefined') {
+                const response = await window.solana.connect();
+                publicKey = response.publicKey.toString();
+                walletConnected = true;
+
+                document.getElementById('connect-wallet').textContent =
+                    `Connected: ${publicKey.slice(0,4)}...${publicKey.slice(-4)}`;
+
+                document.querySelectorAll('.purchase-btn').forEach(btn => {
+                    btn.disabled = false;
+                });
+            } else {
+                alert('Please install Phantom wallet');
+            }
+        } catch (error) {
+            alert('Failed to connect wallet: ' + error.message);
+        }
+    }
+
+    async function handlePurchase(id) {
+        if (!walletConnected) {
+            alert('Please connect your wallet first');
+            return;
+        }
+
+        const listing = listings.find(l => l.id === id);
+        if (!listing) return;
+
+        try {
+            const commission = listing.price * listing.commission;
+            const totalPrice = listing.price + commission;
+
+            if (listing.settlementType === 'instant') {
+                alert(`Processing instant purchase for ${listing.title}\nPrice: ${listing.price} SOL\nCommission (12%): ${commission.toFixed(3)} SOL\nTotal: ${totalPrice.toFixed(3)} SOL`);
+            } else {
+                alert(`Processing standard purchase for ${listing.title}\nPrice: ${listing.price} SOL\nCommission (8%): ${commission.toFixed(3)} SOL\nTotal: ${totalPrice.toFixed(3)} SOL\nFunds will be released after 24 hours`);
+            }
+        } catch (error) {
+            alert('Purchase failed: ' + error.message);
+        }
+    }
+
+    function renderListings() {
+        const listingsContainer = document.getElementById('listings');
+        const now = Date.now();
+
+        const validListings = listings.filter(listing => {
+            const hoursElapsed = (now - listing.listingTime) / (60 * 60 * 1000);
+            return hoursElapsed < 24;
+        });
+
+        listingsContainer.innerHTML = validListings.map(listing => {
+            const hoursLeft = Math.max(0, 24 - (now - listing.listingTime) / (60 * 60 * 1000));
+            const minutesLeft = Math.floor((hoursLeft % 1) * 60);
+            const urgencyClass = hoursLeft < 6 ? 'text-red-600' : 'text-red-500';
+            const timeLeftText = hoursLeft < 1
+                ? `${minutesLeft}m left`
+                : `${Math.floor(hoursLeft)}h ${minutesLeft}m left`;
+
+            return `
+                <div class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
+                    <div class="${urgencyClass} font-medium">${timeLeftText}</div>
+                    <div class="${urgencyClass} text-sm">
+                        24-hour listing (${(hoursLeft / 24 * 100).toFixed(0)}% time remaining)
+                        <span class="ml-2 text-gray-600">
+                            ${listing.settlementType === 'instant' ? '12% instant settlement' : '8% standard settlement'}
+                        </span>
+                    </div>
+
+                    <h3 class="text-xl font-bold mt-2">${listing.title}</h3>
+                    <div class="text-gray-600 text-sm">${listing.location}</div>
+
+                    <p class="text-gray-700 my-3">${listing.description}</p>
+
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-2xl font-bold">${listing.price} SOL</span>
+                        <span class="text-gray-400 line-through">${listing.originalPrice} SOL</span>
+                    </div>
+
+                    <div class="flex items-center gap-2 my-3">
+                        <span class="text-yellow-500">★</span>
+                        <span>${listing.sellerRating}</span>
+                        <span class="text-gray-500">${listing.verificationLevel}</span>
+                    </div>
+
+                    <div class="flex gap-3 mt-4">
+                        <button onclick="handlePurchase('${listing.id}')"
+                                class="purchase-btn flex-1 ${listing.settlementType === 'instant' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'} text-white px-4 py-2 rounded disabled:opacity-50"
+                                ${!walletConnected ? 'disabled' : ''}>
+                            ${listing.settlementType === 'instant' ? 'Buy Instantly (12%)' : 'Buy Standard (8%)'}
+                        </button>
+                        <button onclick="alert('Messaging coming soon!')"
+                                class="flex-1 border border-gray-300 px-4 py-2 rounded hover:bg-gray-50">
+                            Message
+                        </button>
+                    </div>
+                </div>
+            `}).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        new PriceChart();
+        renderListings();
+        document.getElementById('connect-wallet').addEventListener('click', connectWallet);
+        document.getElementById('list-item').addEventListener('click', () => {
+            alert('List Item functionality coming soon!');
+        });
+    });
+</script>
+</body>
+</html>
