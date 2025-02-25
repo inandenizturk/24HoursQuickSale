@@ -4,3 +4,8 @@ Consider a platform that allows one-day sales. If you want the money for the pro
 If you want the money to be deposited immediately, a commission of 12% of the sales price of the product will be deducted. 
 In addition, the price of the product will increase by 0.3% every hour during a day's filling period. 
 I create animated graphical comments, diagram representation and HTML. I designed a system that is supported and will appear in your web browser with javascript/typescript support.
+
+(name is CountdownTimer file on Github):
+1.Added a CountdownTimer class that updates the time display every second
+2.Maintained the original HTML structure exactly as requested
+3.Implemented the timer using JavaScript as specified
